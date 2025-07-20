@@ -1,0 +1,57 @@
+# ============================
+# 👨‍💻 Node.js
+# ============================
+
+# Thư mục phụ thuộc (nặng và tự động cài lại được)
+node_modules/
+
+# Biến môi trường (nhạy cảm)
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# File log tạm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Báo cáo test
+coverage/
+
+# Thư mục build
+dist/
+build/
+
+# Cấu hình hệ điều hành/macOS/Windows
+.DS_Store
+Thumbs.db
+
+# ============================
+# 🧠 VSCode
+# ============================
+
+.vscode/
+.history/
+*.code-workspace
+
+# ============================
+# ⚙️ Cache / lock / tạm
+# ============================
+
+.cache/
+*.swp
+*.swo
+*.tmp
+*.log
+
+# ============================
+# 📦 Optional: PM2 logs nếu dùng
+# ============================
+
+pids/
+logs/
+*.pid
+*.seed
+*.pid.lock

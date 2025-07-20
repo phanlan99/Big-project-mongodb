@@ -1,0 +1,7 @@
+{
+  "singleQuote": false,         // Dùng dấu nháy đôi ("") thay vì dấu nháy đơn ('')
+  "bracketSpacing": true,       // Thêm khoảng trắng giữa dấu ngoặc và nội dung: { foo: bar } thay vì {foo: bar}
+  "tabWidth": 2,                // Mỗi mức thụt lề dùng 2 khoảng trắng
+  "trailingComma": "es5",       // Thêm dấu phẩy ở cuối các phần tử (chỉ với ES5: object, array)
+  "semi": true                  // Thêm dấu chấm phẩy (;) ở cuối dòng
+}

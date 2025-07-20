@@ -1,0 +1,17 @@
+# Bỏ qua thư mục cấu hình VSCode
+/.vscode
+
+# Bỏ qua thư mục chứa các thư viện cài từ npm
+/node_modules
+
+# Bỏ qua thư mục chứa file build/output
+./dist
+
+# Bỏ qua tất cả file có đuôi .env (ví dụ: config.env)
+*.env
+
+# Bỏ qua file .env chính
+.env
+
+# Bỏ qua tất cả các file có dạng .env.*
+.env.*
