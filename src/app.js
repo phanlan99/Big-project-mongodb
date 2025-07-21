@@ -1,7 +1,10 @@
 import express from "express"
 import cors from "cors"
+import cookieParser from "cookie-parser";
+
 
 const app = express();
+app.use(cookieParser())
 
 app.use(
   cors({
@@ -29,11 +32,14 @@ app.use(express.static("public"));
 
 
 //import routes
-import healthCheckRoute from "./routers/healthcheck.routers.js";
+import healthCheckRouter from "./routers/healthcheck.routers.js";
+import userRouter from "./routers/user.routers.js"
 
 
 //routes
-app.use("/api/v1/healthcheck", healthCheckRoute);
+app.use("/api/v1/healthcheck", healthCheckRouter);
+app.use("/api/v1/users", userRouter);
+
 
 
 

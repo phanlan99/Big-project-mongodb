@@ -2,7 +2,7 @@
 id string pk
  username string
  email string
- fullName string
+ fullname string
  avatar string
  coverImage string
  watchHistory ObjectId[] videos
@@ -35,7 +35,7 @@ const userSchema = new Schema(
             lowercase: true,
             trim: true
         },
-        fullName: {
+        fullname: {
             type: String,
             required: true,
             trim: true,
@@ -69,7 +69,7 @@ const userSchema = new Schema(
 userSchema.plugin(mongooseAggregatePaginate)
 userSchema.pre("save" , async function (next){
 
-    if(!this.modified("password")) return next()
+    if(!this.isModified("password")) return next()
 
     this.password =  await bcrypt.hash(this.password, 10)
 
@@ -85,7 +85,7 @@ userSchema.methods.generateAccessToken = function (){
         _id : this._id,
         email : this.email,
         username : this.username,
-        fullName : this.fullName
+        fullname : this.fullname
     },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn : process.env.ACCESS_TOKEN_EXPIRY }
