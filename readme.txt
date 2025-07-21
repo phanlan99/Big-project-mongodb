@@ -26,3 +26,6 @@ B7 : tạo const trong constants.js
         DB access : tạo tài khoản mật khẩu mới 
         connect : vô connect -> comparre lấy : mongodb+srv://phanlandt:<db_password>@cluster0.pg1cmjc.mongodb.net/ bỏ / sau cùng
     }
+
+B8 : Viết hàm nâng cao trong utils
+    

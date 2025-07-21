@@ -26,4 +26,15 @@ app.use(express.static("public"));
 
 
 
+
+
+//import routes
+import healthCheckRoute from "./routers/healthcheck.routers.js";
+
+
+//routes
+app.use("/api/v1/healthcheck", healthCheckRoute);
+
+
+
 export { app } 
