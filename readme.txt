@@ -54,3 +54,17 @@ B13 Tạo dữ liệu xử lý user trong controllers
 
     Xử lý ở controller cách lấy user upload ảnh 
     thêm delete cho cloudinary
+
+B14 Thêm generateAccessAndRefreshToken , loginUser tron user để đăng nhập 
+
+B15 thêm refreshAccessToken và logoutUser trong user để logout xoá đi cái phần refreshToken
+
+B16 : Cả hai đoạn đều cố gắng làm middleware xác thực JWT, nghĩa là:
+        Lấy access token từ cookie hoặc header Authorization.
+        Giải mã token bằng jwt.verify(...).
+        Tìm user trong database bằng _id từ token.
+        Nếu hợp lệ: gán req.user = user để các route sau dùng.
+        Nếu không: báo lỗi 401 - Unauthorized.
+
+B17 : quay lại controller logoutUser tiếp tục middleware của auth
+    Giải thích trong phần Qua_trinh_Auth và cau hỏi về API

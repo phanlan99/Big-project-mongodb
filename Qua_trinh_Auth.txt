@@ -1,0 +1,93 @@
+Chắc chắn rồi. Dưới đây là giải thích toàn bộ luồng logic xác thực (đăng ký, đăng nhập, đăng xuất, và làm mới token) dựa trên các file bạn đã cung cấp.
+
+Luồng này là một quy trình xác thực hiện đại, an toàn và phổ biến, sử dụng **JSON Web Tokens (JWT)** với **Access Token** và **Refresh Token**.
+
+-----
+
+## 1\. Đăng Ký Người Dùng Mới (`registerUser`)
+
+Đây là điểm khởi đầu, nơi người dùng tạo tài khoản.
+
+  * **Đầu vào:** Route `POST /register` nhận `fullname`, `email`, `username`, `password` từ `req.body` và các file `avatar`, `coverImage` từ `req.files` (nhờ middleware `multer`).
+  * **Xử lý file:** `multer` lưu tạm thời ảnh avatar và ảnh bìa vào thư mục `public/temp`.
+  * **Kiểm tra thông tin:**
+    1.  Đảm bảo tất cả các trường bắt buộc (`fullname`, `email`, `username`, `password`) đều được điền.
+    2.  Kiểm tra trong CSDL xem `username` hoặc `email` đã tồn tại chưa bằng cách dùng `User.findOne()`. Nếu có, báo lỗi 409 (Conflict).
+  * **Upload ảnh lên Cloudinary:**
+    1.  Ảnh avatar và ảnh bìa từ thư mục tạm được upload lên dịch vụ lưu trữ đám mây Cloudinary.
+    2.  Hàm `uploadOnCloudynary` trả về một object chứa URL của ảnh đã upload.
+  * **Tạo người dùng và lưu vào CSDL:**
+    1.  **Mã hóa mật khẩu:** Trước khi lưu, `userSchema.pre("save", ...)` trong file `user.models.js` sẽ tự động "bắt" sự kiện này. Nó kiểm tra nếu mật khẩu được thay đổi, nó sẽ dùng `bcrypt.hash()` để mã hóa mật khẩu trước khi lưu vào CSDL.
+    2.  Hàm `User.create()` được gọi để tạo một bản ghi người dùng mới trong CSDL MongoDB với thông tin đã được xác thực và URL của các ảnh.
+  * **Xử lý lỗi:** Nếu quá trình tạo người dùng trong CSDL thất bại (ví dụ: lỗi kết nối), code sẽ xóa các ảnh vừa được upload lên Cloudinary để tránh rác.
+  * **Kết quả:** Trả về thông tin người dùng vừa tạo (không bao gồm mật khẩu và refresh token) với status 201 (Created).
+
+-----
+
+## 2\. Đăng Nhập (`loginUser`)
+
+Sau khi có tài khoản, người dùng sẽ đăng nhập để lấy "chìa khóa" truy cập hệ thống.
+
+  * **Đầu vào:** Route `POST /login` nhận `email` (hoặc `username`) và `password`.
+  * **Tìm kiếm người dùng:** Tìm người dùng trong CSDL dựa trên `email` hoặc `username`. Nếu không tìm thấy, báo lỗi.
+  * **Xác thực mật khẩu:**
+    1.  Mật khẩu người dùng nhập vào (`password`) được so sánh với mật khẩu đã được mã hóa trong CSDL (`this.password`).
+    2.  Quá trình này sử dụng hàm `user.isPasswordCorrect(password)` (được định nghĩa trong `user.models.js`), bên trong nó là `bcrypt.compare()`. Hàm này trả về `true` nếu mật khẩu khớp, ngược lại là `false`.
+    3.  Nếu không khớp, báo lỗi "Thông tin đăng nhập không hợp lệ".
+  * **Tạo Access Token và Refresh Token:**
+    1.  Nếu mật khẩu chính xác, hàm `generateAccessAndRefreshToken` được gọi.
+    2.  Hàm này sử dụng các phương thức `generateAccessToken()` và `generateRefreshToken()` trên đối tượng `user`.
+    3.  **Access Token:** Là một token JWT có thời hạn ngắn (ví dụ: 15 phút), chứa thông tin của người dùng (`_id`, `email`, `username`). Nó được dùng để xác thực cho mỗi yêu cầu truy cập tài nguyên được bảo vệ.
+    4.  **Refresh Token:** Là một token JWT có thời hạn dài (ví dụ: 7 ngày), chỉ chứa `_id` của người dùng. Nó chỉ có một mục đích duy nhất: lấy Access Token mới khi cái cũ hết hạn.
+    5.  Refresh Token mới tạo sẽ được lưu vào CSDL cho người dùng đó.
+  * **Kết quả:**
+    1.  Hệ thống trả về thông tin người dùng, **Access Token**, và **Refresh Token** trong phần body của JSON.
+    2.  Đồng thời, cả hai token này cũng được gửi về trình duyệt dưới dạng **cookies** (`httpOnly` để tăng bảo mật, ngăn JavaScript phía client truy cập).
+
+-----
+
+## 3\. Xác Thực Các Yêu Cầu (`verifyJWT` Middleware)
+
+Khi người dùng đã đăng nhập và muốn truy cập một trang được bảo vệ (ví dụ: trang cá nhân), họ phải xuất trình "chìa khóa" (Access Token).
+
+  * **Middleware `verifyJWT`:** Bất kỳ route nào cần bảo vệ đều sẽ được gắn middleware này.
+  * **Lấy Token:** Middleware cố gắng tìm Access Token theo thứ tự ưu tiên:
+    1.  Trong `req.cookies.accessToken`.
+    2.  Trong header `Authorization` (theo chuẩn "Bearer \<token\>").
+  * **Xác minh Token:**
+    1.  Nếu không có token, báo lỗi 401 (Unauthorized).
+    2.  Nếu có, `jwt.verify()` được dùng để giải mã và xác thực token với `ACCESS_TOKEN_SECRET`.
+    3.  Nếu token không hợp lệ hoặc hết hạn, báo lỗi.
+  * **Gắn thông tin người dùng vào Request:**
+    1.  Nếu token hợp lệ, middleware lấy `_id` từ token đã giải mã.
+    2.  Dùng `_id` để tìm người dùng trong CSDL.
+    3.  Thông tin người dùng (trừ mật khẩu và refresh token) được gắn vào đối tượng `req` (cụ thể là `req.user`).
+  * **Chuyển tiếp:** Gọi `next()` để cho phép request đi tiếp đến controller xử lý chính. Giờ đây, controller đó có thể truy cập `req.user` để biết ai đang thực hiện yêu cầu.
+
+-----
+
+## 4\. Đăng Xuất (`logoutUser`)
+
+Khi người dùng muốn kết thúc phiên làm việc.
+
+  * **Đầu vào:** Route `POST /logout` được bảo vệ bởi middleware `verifyJWT`. Do đó, nó biết người dùng nào đang yêu cầu đăng xuất thông qua `req.user._id`.
+  * **Vô hiệu hóa Refresh Token:**
+    1.  Hệ thống tìm người dùng trong CSDL bằng `req.user._id`.
+    2.  Trường `refreshToken` của người dùng đó trong CSDL được cập nhật thành `null`. Điều này đảm bảo Refresh Token cũ không thể được sử dụng để tạo Access Token mới nữa.
+  * **Xóa Cookies:**
+    1.  Hệ thống gửi phản hồi về cho trình duyệt, yêu cầu xóa `accessToken` và `refreshToken` khỏi cookies bằng `clearCookie()`.
+  * **Kết quả:** Người dùng đã đăng xuất. Họ không còn Access Token hợp lệ và không thể tạo mới bằng Refresh Token cũ.
+
+-----
+
+## 5\. Làm Mới Access Token (`refreshAccessToken`)
+
+Khi Access Token hết hạn nhưng người dùng vẫn đang hoạt động, hệ thống sẽ tự động lấy token mới mà không bắt người dùng đăng nhập lại.
+
+  * **Đầu vào:** Frontend gọi đến route `POST /refresh-token`, gửi kèm `refreshToken` (lấy từ cookie hoặc body).
+  * **Xác thực Refresh Token:**
+    1.  Giải mã `refreshToken` bằng `REFRESH_TOKEN_SECRET`.
+    2.  Lấy `_id` từ token đã giải mã, tìm người dùng trong CSDL.
+    3.  So sánh `refreshToken` được gửi lên với `refreshToken` đang được lưu trong CSDL của người dùng đó. Nếu chúng không khớp, token đã bị thu hồi hoặc không hợp lệ -\> báo lỗi.
+  * **Tạo Token Mới:** Nếu `refreshToken` hợp lệ, hệ thống gọi lại hàm `generateAccessAndRefreshToken` để tạo ra một cặp **Access Token mới** và **Refresh Token mới**.
+  * **Kết quả:** Cặp token mới này được trả về cho client (cả trong JSON và cookies), thay thế cho cặp token cũ, và phiên làm việc của người dùng được tiếp tục một cách liền mạch.
