@@ -4,6 +4,22 @@ import { User } from "../models/user.models.js";
 import { uploadOnCloudynary, deleteFromCloudynary } from "../utils/cloudynary.js"
 import { ApiResponse } from "../utils/ApiRespon.js";
 import { log } from "console";
+import jwr from "jsonwebtoken"
+
+
+const generateAccessAndRefreshToken = async (userId) => {
+    try {
+        const user = await User.findById(userId)
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+        user.refreshToken = refreshToken
+        await user.save({ validateBeforeSave: false })
+        return { accessToken, refreshToken }
+    } catch (error) {
+        throw new ApiError(500, "có lỗi gì đã xảy ra trong khi tạo accesstoken và refrestoken")
+    }
+}
+
 
 const registerUser = asyncHandler(async (req, res) => {
     //TODO
@@ -20,7 +36,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
     const existedUser = await User.findOne({
         $or: [{ username }, { email }]
-    })
+    }) //1
+
     if (existedUser) {
         throw new ApiError(409, "User name or email already exists")
 
@@ -91,10 +108,10 @@ const registerUser = asyncHandler(async (req, res) => {
 
     } catch (error) {
         console.log("Người dùng không được tạo", error);
-        if(avatar){
+        if (avatar) {
             await deleteFromCloudynary(avatar.public_id)
         }
-        if(coverImage){
+        if (coverImage) {
             await deleteFromCloudynary(coverImage.public_id)
         }
         throw new ApiError(500, "Có lỗi gì đó khi đăng ký người dùng và ảnh đã bị xoá")
@@ -103,6 +120,123 @@ const registerUser = asyncHandler(async (req, res) => {
 
 })
 
+const loginUser = asyncHandler(async (req, res) => {
+    // lấy data từ body
+    const { email, username, password } = req.body
+
+    //validation : Xác thực
+    if (!email) {
+        throw new ApiError(400, "Email luôn bắt buộc")
+    }
+
+    const user = await User.findOne({
+        $or: [{ username }, { email }]
+    }) // lấy từ registerUser để check xem
+
+    if (!user) {
+        throw new ApiError(400, "Không tìm thấy người dùng")
+    }
+
+    // Xác thực mật khẩu
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if (!isPasswordValid) {
+        throw new ApiError(400, "Thông tin đăng nhập không hợp lệ")
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
+
+    const loggedInUser = await User.findById(user._id)
+        .select("-password -refreshToken");
+
+    const options = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production"
+    }
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(new ApiResponse(
+            200,
+            { user: loggedInUser, accessToken, refreshToken },
+            "Đăng nhập thành công"
+        ))
+})
+
+const logoutUser = asyncHandler(async (req , res) => {
+    await User.findByIdAndUpdate(
+        //Todo : Cần quay lại đây sau khi middleware được xử lý
+        req.user._id,
+        {
+            $set : {
+                refreshToken : null,
+
+            }
+        },
+        {new : true}
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production"
+    }
+
+    return res
+            .status(200)
+            .clearCookie("accessToken" , options)
+            .clearCookie("refreshToken" , options)
+            .json( new ApiResponse(200 , {} ,  "Đã đăng xuất thành công"))
+})
+
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const inCommingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+    if (!inCommingRefreshToken) {
+        throw new ApiError(401, "Refresh Token là bắt buộc");
+    }
+
+    try {
+        const decodedToken = jwt.verify(
+            inCommingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        );
+
+        const user = await User.findById(decodedToken?._id);
+
+        if (!user || inCommingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh Token không hợp lệ");
+        }
+
+        const options = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production"
+        };
+
+        const { accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefreshToken(user._id);
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshToken, options)
+            .json(new ApiResponse(
+                200,
+                { accessToken, refreshToken: newRefreshToken },
+                "Access Token refresh thành công"
+            ));
+
+    } catch (error) {
+        throw new ApiError(500, "Có lỗi gì đó trong quá trình refreshing access token");
+    }
+});
+
+
+
 export {
-    registerUser
+    registerUser,
+    loginUser,
+    refreshAccessToken,
+    logoutUser
 }

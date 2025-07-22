@@ -28,4 +28,29 @@ B7 : tạo const trong constants.js
     }
 
 B8 : Viết hàm nâng cao trong utils
-    
+
+B9 : Tạo heathcheck 
+    tạo controllers.heathcheck
+    tạo heathcheck.routers
+    tạo use.api trong app.js
+
+B10 : Tạo models qua https://app.eraser.io/workspace/YtPqZ1VogxGy1jzIDkzj
+    Tạo theo schema export ra dữ liệu
+    Sử dụng thêm mongoose aggregate paginate v2
+    npm install mongoose-aggregate-paginate-v2
+    thêm vào các models
+
+B11 : Thêm thư viện bcrypt mã hoá , sử dụng methods của Schema , cài thêm thư viện của json web token để access với refresh token.
+
+B12 : cài $ npm install cookie-parser
+    cài thêm multer npm install multer
+    npm install cloudinary
+    tạo middlewares - multer.js upload ảnh
+
+
+B13 Tạo dữ liệu xử lý user trong controllers
+    Sau đó chuyển đường đi routers
+    Rồi cho vào app.js để api
+
+    Xử lý ở controller cách lấy user upload ảnh 
+    thêm delete cho cloudinary
