@@ -5,6 +5,8 @@ import { uploadOnCloudynary, deleteFromCloudynary } from "../utils/cloudynary.js
 import { ApiResponse } from "../utils/ApiRespon.js";
 import { log } from "console";
 import jwr from "jsonwebtoken"
+import { channel, subscribe } from "diagnostics_channel";
+import mongoose from "mongoose";
 
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -339,6 +341,163 @@ const updateUserCoverImage = asyncHandler(async (req , res) => {
             .json(new ApiResponse(200 , user , "CoverImage update thành công"))
 })
 
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    if (!username?.trim()) {
+        throw new ApiError(400, "Username là bắt buộc");
+    }
+
+    // Lấy ID của người dùng đang xem trang (có thể là chính họ hoặc người khác)
+    // Cần kiểm tra req.user tồn tại trước khi dùng
+    const viewerId = req.user ? new mongoose.Types.ObjectId(req.user._id) : null;
+
+    const channel = await User.aggregate([
+        // --- Giai đoạn 1: Tìm kênh (user) theo username ---
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        // --- Giai đoạn 2: Lấy danh sách người đã đăng ký kênh này ---
+        {
+            $lookup: {
+                from: "subscriptions", // Tên collection trong MongoDB
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        // --- Giai đoạn 3: Lấy danh sách các kênh mà kênh này đã đăng ký ---
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        // --- Giai đoạn 4: Thêm các trường dữ liệu được tính toán ---
+        {
+            $addFields: {
+                subscribersCount: { $size: "$subscribers" },
+                channelsSubscribedToCount: { $size: "$subscribedTo" },
+                isSubscribed: {
+                    // Nếu không có người xem (chưa đăng nhập), isSubscribed luôn là false
+                    $cond: {
+                        if: { $and: [
+                            { $ne: [viewerId, null] }, // Đảm bảo viewerId tồn tại
+                            { $in: [viewerId, "$subscribers.subscriber"] }
+                        ]},
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        // --- Giai đoạn 5: Định hình lại cấu trúc output cuối cùng ---
+        {
+            $project: {
+                fullname: 1,
+                username: 1,
+                avatar: 1,
+                coverImage: 1,
+                email: 1,
+                subscribersCount: 1,
+                channelsSubscribedToCount: 1,
+                isSubscribed: 1
+                // Các mảng lớn như 'subscribers' và 'subscribedTo' không cần trả về nữa
+            }
+        }
+    ]);
+
+    if (!channel?.length) {
+        throw new ApiError(404, "Kênh không tồn tại");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, channel[0], "Đã lấy được dữ liệu channel thành công"));
+});
+
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+    // Sử dụng Aggregation Pipeline để thực hiện các truy vấn phức tạp trên CSDL.
+    // Kết quả sẽ được gán vào biến user.
+    const user = await User.aggregate([
+
+        // --- Giai đoạn 1: TÌM chính xác người dùng đang yêu cầu ---
+        {
+            // $match: Lọc các document, chỉ giữ lại những document thỏa mãn điều kiện.
+            $match: {
+                // Tìm user có _id khớp với ID của người dùng đã đăng nhập.
+                // req.user._id được lấy từ middleware xác thực đã chạy trước đó.
+                // new mongoose.Types.ObjectId: Đảm bảo so sánh đúng kiểu dữ liệu (ObjectId vs String).
+                _id: new mongoose.Types.ObjectId(req.user?._id)
+            }
+        },
+
+        // --- Giai đoạn 2: LẤY thông tin chi tiết của các video đã xem ---
+        {
+            // $lookup: Join (kết nối) với một collection khác để lấy dữ liệu liên quan.
+            $lookup: {
+                from: "videos",                  // Join với collection 'videos'.
+                localField: "watchHistory",      // Lấy mảng ID video từ trường 'watchHistory' của User.
+                foreignField: "_id",             // So khớp với trường '_id' trong collection 'videos'.
+                as: "watchHistory",              // Đặt tên cho mảng kết quả là 'watchHistory'.
+                                                 // Mảng này sẽ chứa đầy đủ thông tin của các video đã xem.
+
+                // --- PIPELINE CON: Xử lý trên TỪNG video được join vào ---
+                // Pipeline này sẽ chạy cho mỗi video trong mảng watchHistory.
+                pipeline: [
+                    // --- Giai đoạn 2.1: LẤY thông tin chủ sở hữu của video ---
+                    {
+                        $lookup: {
+                            from: "users",            // Join tiếp với collection 'users' để tìm chủ sở hữu.
+                            localField: "owner",      // Lấy ID từ trường 'owner' của video.
+                            foreignField: "_id",      // So khớp với trường '_id' trong collection 'users'.
+                            as: "owner",              // Đặt tên cho mảng kết quả là 'owner'.
+
+                            // --- PIPELINE CON (lồng sâu): Chỉ lấy các trường cần thiết của chủ sở hữu ---
+                            pipeline: [
+                                {
+                                    // $project: Chỉ định các trường muốn giữ lại.
+                                    $project: {
+                                        fullname: 1,  // Lấy fullname (1 có nghĩa là lấy).
+                                        username: 1,  // Lấy username.
+                                        avatar: 1     // Lấy avatar.
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    
+                    // --- Giai đoạn 2.2: "Giải nén" mảng chủ sở hữu ---
+                    {
+                        // $addFields: Thêm hoặc ghi đè trường.
+                        $addFields: {
+                            // $lookup luôn trả về một mảng, kể cả khi chỉ có 1 kết quả (vd: owner: [{...}]).
+                            // $first: Lấy phần tử đầu tiên của một mảng.
+                            // Ghi đè trường 'owner' (đang là mảng) bằng chính object đầu tiên bên trong nó.
+                            owner: { $first: "$owner" }
+                        }
+                    }
+                ]
+            }
+        }
+    ]);
+
+    // Aggregation luôn trả về một mảng kết quả.
+    // Vì ta tìm theo _id duy nhất, kết quả sẽ là một mảng có đúng 1 phần tử ở vị trí [0].
+    // Ta lấy ra lịch sử xem phim từ phần tử đó.
+    const finalWatchHistory = user[0]?.watchHistory;
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, finalWatchHistory, "Lịch sử lượt xem đã được lấy thành công"));
+});
+
 export {
     registerUser,
     loginUser,
@@ -348,5 +507,7 @@ export {
     getCurrentUser,
     updateAcountdetails,
     updateUserAvatar,
-    updateUserCoverImage
+    updateUserCoverImage,
+    getUserChannelProfile,
+    getWatchHistory
 }
