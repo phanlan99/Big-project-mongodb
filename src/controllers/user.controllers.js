@@ -232,11 +232,121 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 });
 
+const changeCurrentPassword = asyncHandler(async (req , res ) => {
+    // yêu cầu mật khẩu cũ và mật khẩu mới
+    const {oldPassword , newPassword} = req.body
+    // chỉ ra user cần thay đổi mật khẩu
+    const user = await User.findById(req.user?._id)
+    // Chỉ ra mật khẩu hợp lệ hay không
+    const isPasswordValid = await user.isPasswordCorrect(oldPassword)
+    //validation
+    if(!isPasswordValid){
+        throw new ApiError(401 , "mật khẩu cũ không chính xác")
+    }
+    user.password = newPassword
 
+    await user.save({validateBeforeSave : false})
+
+    return res
+            .status(200)
+            .json( new ApiResponse(200 , {} , "Đã thay đổi mật khẩu"))
+
+})
+
+
+const getCurrentUser = asyncHandler(async (req , res) => {
+    return res  
+            .status(200)
+            .json( new ApiResponse(200 , req.user , "Thông tin User hiện tại"))
+})
+
+const updateAcountdetails = asyncHandler(async (req , res) => {
+    const {fullname , email} = req.body
+
+    if(!fullname || !email){
+        throw new ApiError(400 , "Fullname và email là bắt buộc")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?.id,
+        {
+            $set : {
+                fullname,
+                email : email
+            }
+        },
+        {new : true}
+    ).select("-password -refreshToken")
+
+    return res
+            .status(200)
+            .json(new ApiResponse(200 , user , "Tài khoản chi tiết đã được cập nhật thành công"))
+})
+
+const updateUserAvatar = asyncHandler(async (req , res) => {
+    const avatarLocalPath  = req.file?.path
+
+    if(!avatarLocalPath){
+        throw new ApiError(400 , "File là bắt buộc")
+    }
+
+    const avatar = await uploadOnCloudynary(avatarLocalPath)
+
+    if(!avatar.url){
+        throw new ApiError(500 , "Có chuyện gì đó xảy ra trong khi upload avatar")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set : {
+                avatar : avatar.url
+            }
+        },
+        {new : true}
+    ).select("-password -refreshToken")
+
+    return res
+            .status(200)
+            .json(new ApiResponse(200 , user , "Avatar update thành công"))
+})
+
+const updateUserCoverImage = asyncHandler(async (req , res) => {
+    const coverImagePath  = req.file?.path
+
+    if(!coverImagePath){
+        throw new ApiError(400 , "File là bắt buộc")
+    }
+
+    const coverImage = await uploadOnCloudynary(coverImagePath)
+
+    if(!coverImage.url){
+        throw new ApiError(500 , "Có chuyện gì đó xảy ra trong khi upload avatar")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set : {
+                coverImage : coverImage.url
+            }
+        },
+        {new : true}
+    ).select("-password -refreshToken")
+
+    return res
+            .status(200)
+            .json(new ApiResponse(200 , user , "CoverImage update thành công"))
+})
 
 export {
     registerUser,
     loginUser,
     refreshAccessToken,
-    logoutUser
+    logoutUser,
+    changeCurrentPassword,
+    getCurrentUser,
+    updateAcountdetails,
+    updateUserAvatar,
+    updateUserCoverImage
 }
