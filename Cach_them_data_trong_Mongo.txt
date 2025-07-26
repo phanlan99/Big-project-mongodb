@@ -1,0 +1,137 @@
+Thêm EXtention : Mongo for gì đó VS
+
+Đổi One thành Many để Insert giá trị vào : https://gist.github.com/hiteshchoudhary/a80d86b50a5d9c591198a23d79e1e467#file-authors-json-L5
+
+Add trong mongo.db để add thêm class cho nó 
+
+
+Chọn User trên Mongo chế độ Agreegation , Mục tiêu là tìm hiểu cấu trúc của đường ống của Agreegation?
+
+Get the anwers
+
+How many User are Active ? $match , $count
+
+Độ tuổi trung bình của người dùng là bao nhiêu ?
+
+[
+  {
+    $group: {
+      _id: "$gender",
+      averageAge : {
+        $avg : "$age"
+      }
+    }
+  }
+]
+
+$group : liệt kê ra 5 loại quả phổ biến hoặc loại quả 
+
+[
+  {
+    $group: {
+      _id: "$favoriteFruit",
+      count : {
+        $sum : 1
+      }
+    }
+  },
+  {
+    $sort: {
+      count: -1
+    }
+  },
+  {
+    $limit: 2
+  }
+]
+
+
+------------------------------------------------------------------------/----------------------
+
+[
+  {
+    $group: {
+      _id: "$favoriteFruit",
+      count : {
+        $sum : 1
+      }
+    },
+  },
+  {
+    $sort: {
+      count: 1
+    }
+  },
+  {
+    $limit: 2
+  }
+]
+
+/-------------------------------------------------------------------------------/
+
+
+[
+  {
+    $group: {
+      _id: "$company.location.country",
+      count : {
+        $sum : 1
+      }
+    },
+  },
+]
+
+----------------------------//--------------------
+
+Trung bình , tổng , nhóm  , limit
+
+Trung bình số trong tags của User
+
+[
+  {
+    $unwind: "$tags"
+  },
+  {
+    $group: {
+      _id: "$_id",
+      numberOfTag : {$sum : 1}
+    }
+  },
+  {
+    $group: {
+      _id: null ,
+      avgNumberOfTag : {$avg : "$numberOfTag"}
+    }
+  }
+]
+
+------------------------/-----------------------
+
+[
+  {
+    $addFields: {
+      soluongTags: {
+        $size: {
+          $ifNull: ["$tags", []]
+        }
+      }
+    }
+  },
+  {
+    $group: {
+      _id: null ,
+      trungbinhcuatags : {
+        $avg : "$soluongTags"
+      }
+    }
+  }
+]
+
+
+
+-----------------------------/----------------------------
+
+age
+
+
+

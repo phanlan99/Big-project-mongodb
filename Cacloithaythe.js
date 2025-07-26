@@ -69,3 +69,51 @@ const getUserChannelProfile = asyncHandler(async (req , res) => {
             .status(200)
             .json( new ApiResponse(200 , channel[0] , " Đã lấy được dữ liệu channel profile thành công "))
 })
+
+const getWatchHistory = asyncHandler( async (req , res) => {
+    const user = await User.aggregate([
+        {
+            $match : {
+                _id : new mongoose.Types.ObjectId(req.user?._id)
+            }
+        },
+        {
+            $lookup : { // lịch sử xem
+                from : "videos",
+                localField : "watchHistory",
+                foreignField : "_id",
+                as : "WatchHistory",
+                pipeline : [ // sau khi xem xong video này tôi muốn biết ai là người đăng video đó
+                    {
+                        $lookup : {
+                            from : "users",
+                            localField : "owner",
+                            foreignField : "_id",
+                            as : "owner",
+                            pipeline : [
+                                {
+                                    $project : {
+                                        fullname : 1,
+                                        username : 1,
+                                        avatar : 1
+                                    }
+                                },
+                                {
+                                    $addFields : {
+                                        owner : {
+                                            $first : "owner"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    return res
+            .status(200)
+            .json(new ApiResponse(200 , user[0]?.watchHistory , "Lịch sử lượt xem đã được lấy thành công"))
+})
